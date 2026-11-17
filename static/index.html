@@ -50,30 +50,6 @@
     <p id="vacio" class="vacio" hidden>No hay celulares que coincidan con la búsqueda.</p>
   </section>
 
-  <section class="panel">
-    <div class="panel-cab"><h2>Contar por fotografía</h2></div>
-    <p class="ayuda">Sube una foto del estante. El sistema encuentra los celulares, reconoce el modelo de cada uno y calcula el inventario.
-      Si la confianza es menor a 70 %, el equipo queda <em>por revisar</em>.</p>
-    <div class="barra">
-      <input id="foto" type="file" accept="image/*" aria-label="Foto del estante">
-      <button id="btn-analizar" class="btn">Analizar foto</button>
-      <button id="btn-ejemplo" class="btn btn-claro">Usar foto de ejemplo</button>
-    </div>
-    <div id="resultado" hidden>
-      <div class="res-grid">
-        <figure class="marco"><img id="img-anotada" alt="Foto analizada con los recuadros"></figure>
-        <div>
-          <div class="chips" id="chips"></div>
-          <table class="mini" id="tabla-conteo">
-            <thead><tr><th>Modelo</th><th class="num">Cantidad detectada</th></tr></thead>
-            <tbody></tbody>
-          </table>
-          <p id="nota-metodo" class="ayuda"></p>
-          <button id="btn-aplicar" class="btn">Aplicar este conteo al inventario</button>
-        </div>
-      </div>
-    </div>
-  </section>
   <!-- ============ LECTURA OCR DE CAJAS (imagenes y PDF) ============
        Cada imagen y cada pagina de PDF es UNA caja independiente.
        Flujo: elegir archivos -> "Leer cajas" (POST /api/ocr, vista previa)

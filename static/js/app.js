@@ -4,7 +4,6 @@ const clp = n => "$" + Number(n).toLocaleString("es-CL");
 const API = "/api";
 const SIN_IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="54" height="104"><rect width="54" height="104" fill="#eee"/><text x="27" y="56" font-size="10" text-anchor="middle" fill="#888" font-family="sans-serif">sin foto</text></svg>');
 let celulares = [];
-let ultimoAnalisis = null;
 let editandoId = null;
 
 function toast(msg, mal = false) {
@@ -128,62 +127,6 @@ form.addEventListener("submit", async ev => {
     await cargar();
   } catch (e) { const p = $("#dlg-error"); p.textContent = e.message; p.hidden = false; }
 });
-
-// ------------------------------------------------------------ deteccion por foto
-async function analizar(archivo, cajas = null) {
-  const btns = [$("#btn-analizar"), $("#btn-ejemplo")];
-  btns.forEach(b => (b.disabled = true));
-  try {
-    const fd = new FormData();
-    fd.append("imagen", archivo);
-    if (cajas) fd.append("cajas", JSON.stringify(cajas));
-    ultimoAnalisis = await api("/detectar", { method: "POST", body: fd });
-    mostrarAnalisis(ultimoAnalisis);
-  } catch (e) { toast(e.message, true); }
-  finally { btns.forEach(b => (b.disabled = false)); }
-}
-
-function mostrarAnalisis(a) {
-  $("#resultado").hidden = false;
-  $("#img-anotada").src = a.imagen_anotada;
-  $("#chips").replaceChildren(
-    el("span", { className: "chip", textContent: `${a.detectados} detectados` }),
-    el("span", { className: "chip ok", textContent: `${a.identificados} identificados` }),
-    el("span", { className: "chip aviso", textContent: `${a.por_revisar} por revisar` }));
-  $("#tabla-conteo tbody").replaceChildren(...a.conteo_detalle.map(c =>
-    el("tr", {}, el("td", { textContent: c.nombre + (c.en_catalogo ? "" : " (no está en el catálogo)") }),
-      el("td", { className: "num", textContent: c.cantidad }))));
-  const nota = {
-    cajas: "Recuadros entregados con la foto (foto de ejemplo).",
-    yolo: "Equipos encontrados con YOLO.",
-    opencv: "Equipos encontrados con el detector incluido (OpenCV, funciona mejor con fondo liso). Para fotos con fondos complicados instala YOLO: pip install ultralytics.",
-    imagen_completa: "No se encontraron equipos separados: la foto completa se tomó como un solo equipo. Si es la foto de una CAJA, usa la sección «Leer cajas con OCR». Para estantes complicados instala YOLO (pip install ultralytics).",
-  }[a.metodo];
-  $("#nota-metodo").textContent = nota || "";
-  $("#btn-aplicar").disabled = !a.conteo_detalle.some(c => c.id);
-}
-
-$("#btn-analizar").onclick = () => {
-  const f = $("#foto").files[0];
-  if (!f) return toast("Primero elige una foto", true);
-  analizar(f);
-};
-$("#btn-ejemplo").onclick = async () => {
-  const [blob, cajas] = await Promise.all([
-    fetch("/static/ejemplos/estante.png").then(r => r.blob()),
-    fetch("/static/ejemplos/estante_cajas.json").then(r => r.json()),
-  ]);
-  analizar(new File([blob], "estante.png", { type: "image/png" }), cajas);
-};
-$("#btn-aplicar").onclick = async () => {
-  if (!ultimoAnalisis) return;
-  const conteo = ultimoAnalisis.conteo_detalle.filter(c => c.id).map(c => ({ id: c.id, cantidad: c.cantidad }));
-  try {
-    await api("/inventario/aplicar", jsonOpc("POST", { conteo, por_revisar: ultimoAnalisis.por_revisar }));
-    toast("Inventario actualizado con el conteo de la foto");
-    await cargar();
-  } catch (e) { toast(e.message, true); }
-};
 
 // ------------------------------------------------------------ lectura OCR de cajas
 // Se pueden subir VARIOS archivos: imagenes (una caja cada una) y/o PDF (una
