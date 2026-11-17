@@ -48,6 +48,7 @@ const EP = [
   ["post", "/api/detectar", "multipart/form-data: \"imagen\" (foto del estante) y opcional \"cajas\" (JSON [[x0,y0,x1,y1],…]). Devuelve conteo y detalle por equipo.", null],
   ["post", "/api/ocr", "multipart/form-data: uno o varios archivos en el campo \"imagen\" (png, jpg, webp o PDF; el formato se detecta solo). Cada imagen y cada página de PDF es UNA caja que se lee y calcula por separado (cantidad × precio). Sin \"aplicar\" es vista previa; con aplicar=1 suma las unidades al stock. Devuelve \"lecturas\": una por caja (409 si ya se ingresó; forzar=1 lo permite).", null],
   ["post", "/api/inventario/aplicar", "Aplica un conteo al stock: {\"conteo\":[{\"id\":1,\"cantidad\":6}],\"por_revisar\":1}.", null],
+  ["post", "/api/chat", "Chatbot de consulta (solo lectura). Responde con Gemini si el servidor tiene GOOGLE_API_KEY y, si no, con reglas simples. \"historial\" es opcional: [{\"rol\":\"usuario\"|\"bot\",\"texto\":\"…\"}]. Devuelve respuesta, modo (gemini o reglas) y, si hubo un problema, aviso.", '{"mensaje":"¿Cuántos iPhone 13 quedan?"}'],
   ["get", "/api/movimientos?limite=20", "Historial de cambios de stock.", null],
   ["get", "/api/health", "Comprueba que el servicio responde.", null],
 ];

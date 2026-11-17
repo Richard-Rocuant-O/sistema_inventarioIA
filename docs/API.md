@@ -150,6 +150,28 @@ curl -F imagen=@a.png -F imagen=@b.jpg http://localhost:5000/api/ocr            
 
 La lectura toma unos segundos por caja (se ejecuta el OCR). Las cajas de práctica para imprimir están en `cajas_de_prueba/`.
 
+## Chatbot de consulta
+
+### `POST /api/chat`
+
+Chatbot de **solo lectura** que responde preguntas sobre el inventario (stock, precios, totales). Es el mismo que usa el botón flotante del panel.
+
+JSON de entrada:
+- `mensaje` (obligatorio, hasta 500 caracteres): la pregunta.
+- `historial` (opcional): mensajes anteriores `[{"rol": "usuario" | "bot", "texto": "..."}]`; se usan los últimos 8.
+
+Respuesta:
+```json
+{"respuesta": "Quedan 6 unidades de Apple iPhone 13 en stock.", "modo": "gemini", "modelo": "gemini-3.1-flash-lite"}
+```
+- `modo: "gemini"`: respondió el modelo de IA con el texto de `GET /api/contexto` como única fuente.
+- `modo: "reglas"`: respuesta simple por palabras clave, porque no hay clave o Gemini falló (sin internet, cuota gratuita agotada). Trae un campo `aviso` con el motivo.
+- 400 si falta `mensaje` o es demasiado largo.
+
+El chatbot **no modifica** stock, precios ni catálogo. Siempre lee el inventario actual. `GET /api/health` informa en `chat.modo` con qué modo responde.
+
+Ejemplo: `curl -X POST -H "Content-Type: application/json" -d '{"mensaje":"cuanto vale el inventario?"}' http://localhost:5000/api/chat`
+
 ## Consejos para el chatbot
 
 - Con un modelo de lenguaje: llamar `GET /api/contexto` en cada conversación (o cada pocos minutos) y pegar `texto` en el mensaje de sistema, para que responda con el stock real.
