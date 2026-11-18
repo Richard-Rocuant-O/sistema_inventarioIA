@@ -79,6 +79,8 @@ En el panel, **Contar por fotografía** → sube una foto o usa la foto de ejemp
 
 Para probar sin cámara: `python herramientas/probar_ocr.py` ensucia las cajas (giro, perspectiva, poca luz, ruido, JPG) y comprueba que se lean bien. Para regenerar las cajas: `python herramientas/generar_cajas.py`. Para crear 5 cajas **extra** (los mismos modelos con otras cantidades: 10, 2, 8, 12 y 1 unidades) y un `cajas_de_prueba_extra.pdf`: `python herramientas/generar_cajas.py --extra` (no modifica las 3 cajas originales).
 
+Si eliminas celulares del catálogo, **«Leer cajas» sigue reconociendo los 3 modelos conocidos** (Galaxy A15, iPhone 13 y Redmi Note 13) con su precio de referencia, y al ingresar la caja el celular se **vuelve a agregar solo** con la cantidad de la caja. Eliminar un celular también borra sus cajas ya leídas, así que se pueden ingresar otra vez. Un modelo distinto de esos 3 debe estar en el catálogo para reconocerse.
+
 Si una caja real no se lee: sácala de frente, con buena luz y sin reflejos, que la línea de cantidad se vea grande. Lo que no se pueda leer queda **por revisar** y no cambia el stock.
 
 > Para entender el código, empieza por **`docs/GUIA_CODIGO.md`**.
