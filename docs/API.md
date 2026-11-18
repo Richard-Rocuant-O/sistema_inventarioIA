@@ -148,6 +148,8 @@ curl -F imagen=@cajas_de_prueba/cajas_de_prueba.pdf -F aplicar=1 http://localhos
 curl -F imagen=@a.png -F imagen=@b.jpg http://localhost:5000/api/ocr                                    # varias imagenes
 ```
 
+**Modelos eliminados del catálogo.** El OCR compara la caja con el catálogo **y también con los 3 modelos conocidos** del proyecto (`SEMILLA` de `db.py`: Galaxy A15, iPhone 13 y Redmi Note 13). Si uno de ellos se eliminó, la caja igual se reconoce, con su precio de referencia, y la lectura trae `nuevo_en_catalogo: true` y `stock_anterior: 0`. Con `aplicar=1` el celular se **vuelve a agregar** al catálogo (movimiento `alta`) y se le suma la cantidad de la caja. Un modelo que no sea de esos 3 y no esté en el catálogo sigue quedando «por revisar». Además, al eliminar un celular (`DELETE /api/celulares/{id}`) se borran sus cajas ya leídas, para poder ingresarlas de nuevo.
+
 La lectura toma unos segundos por caja (se ejecuta el OCR). Las cajas de práctica para imprimir están en `cajas_de_prueba/`.
 
 ## Chatbot de consulta

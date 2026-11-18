@@ -245,6 +245,9 @@ def borrar(cid):
     with db.conectar() as con:
         antes = celular_o_404(con, cid)
         db.registrar_movimiento(con, cid, "baja", antes["cantidad"], None, antes["nombre"])
+        # Se olvidan tambien sus cajas ya leidas por OCR (la proteccion contra duplicados),
+        # para poder leerlas e ingresarlas de nuevo. El historial queda en 'movimientos'.
+        con.execute("DELETE FROM lecturas_ocr WHERE celular_id = ?", (cid,))
         con.execute("DELETE FROM celulares WHERE id = ?", (cid,))
     return jsonify({"eliminado": cid})
 
@@ -396,6 +399,23 @@ def miniatura(img, ancho=420):
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode()
 
 
+def modelos_fuera_del_catalogo(catalogo):
+    """Modelos conocidos (db.SEMILLA) que hoy NO estan en el catalogo.
+
+    Pasa, por ejemplo, cuando se eliminaron los celulares. El OCR los reconoce igual
+    (con su precio de referencia) y, al ingresar la caja, se vuelven a agregar solos.
+    Llevan id=None, cantidad=0 y la marca nuevo_en_catalogo=True.
+    """
+    en_catalogo = {c["nombre"] for c in catalogo}
+    faltan = []
+    for fila in db.SEMILLA:
+        if fila[0] not in en_catalogo:
+            c = dict(zip(db.CAMPOS, fila))          # el orden de SEMILLA es el de db.CAMPOS
+            c.update(id=None, cantidad=0, nuevo_en_catalogo=True)
+            faltan.append(c)
+    return faltan
+
+
 def procesar_caja(caja, aplicar, forzar):
     """Lee UNA caja (una imagen o una pagina de PDF) y, si se pide, la ingresa.
 
@@ -407,18 +427,21 @@ def procesar_caja(caja, aplicar, forzar):
         # el catalogo se lee ahora (no antes) para ver el stock ya actualizado
         # por las cajas anteriores del mismo envio
         catalogo = [dict(r) for r in con.execute("SELECT * FROM celulares")]
+        # el OCR compara contra el catalogo MAS los modelos conocidos que se hayan eliminado
+        todos = catalogo + modelos_fuera_del_catalogo(catalogo)
         previa = con.execute("SELECT fecha FROM lecturas_ocr WHERE huella = ?",
                              (caja["huella"],)).fetchone()
 
         # 1) el OCR hace todo el trabajo de lectura y calculo
-        res = ocr.leer_caja(caja["img"], catalogo, caja["texto_previo"])
+        res = ocr.leer_caja(caja["img"], todos, caja["texto_previo"])
         res["miniatura"] = miniatura(caja["img"])
         res.update(archivo=caja["nombre"], formato=caja["formato"], pagina=caja["pagina"],
                    aplicado=False, ya_ingresada=previa is not None,
-                   stock_anterior=None, stock_nuevo=None)
+                   stock_anterior=None, stock_nuevo=None, nuevo_en_catalogo=False)
 
-        celular = next((c for c in catalogo if c["id"] == res["celular_id"]), None)
+        celular = next((c for c in todos if c["nombre"] == res["modelo"]), None) if res["modelo"] else None
         if celular:
+            res["nuevo_en_catalogo"] = bool(celular.get("nuevo_en_catalogo"))
             res["stock_anterior"] = celular["cantidad"]
             res["stock_nuevo"] = celular["cantidad"] + (res["cantidad_leida"] or 0)
             res["imagen_url"] = db.fila_a_dict(celular, request.host_url)["imagen_url"]
@@ -433,7 +456,18 @@ def procesar_caja(caja, aplicar, forzar):
             return {**res, "error": f"Esta caja ya se ingreso el {previa['fecha']}. "
                     "Usa forzar=1 si es otra caja igual."}, 409
 
-        # 3) sumar al stock y dejar rastro (movimiento + lectura)
+        # 3) si el modelo se habia eliminado del catalogo, se agrega de nuevo (stock 0)
+        if celular.get("nuevo_en_catalogo"):
+            cur = con.execute(
+                "INSERT INTO celulares (nombre, marca, precio, cantidad, pantalla, ram,"
+                " almacenamiento, bateria, camara, color, imagen, actualizado)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                tuple(celular[c] for c in db.CAMPOS) + (db.ahora(),))
+            celular["id"] = res["celular_id"] = cur.lastrowid
+            db.registrar_movimiento(con, celular["id"], "alta", None, 0,
+                                    f"Modelo agregado al catalogo desde una caja leida por OCR ({caja['nombre']})")
+
+        # 4) sumar al stock y dejar rastro (movimiento + lectura)
         con.execute("UPDATE celulares SET cantidad = ?, actualizado = ? WHERE id = ?",
                     (res["stock_nuevo"], db.ahora(), celular["id"]))
         db.registrar_movimiento(con, celular["id"], "ingreso_ocr", res["stock_anterior"],

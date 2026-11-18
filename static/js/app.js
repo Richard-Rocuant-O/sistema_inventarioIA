@@ -153,7 +153,8 @@ function mensajeCaja(d) {
   if (d.aplicado) return "";
   if (d.error) return d.error;
   if (d.ya_ingresada) return "Esta misma caja ya se ingresó antes, por eso no se vuelve a sumar al stock.";
-  if (d.estado === "identificado") return "";
+  if (d.estado === "identificado")
+    return d.nuevo_en_catalogo ? "Este modelo ya no está en el catálogo: se agregará solo, con su precio de referencia, al ingresar la caja." : "";
   // sin celulares en el catalogo no hay con que comparar el texto de la caja ni precio para calcular
   if (Array.isArray(d.ranking) && d.ranking.length === 0)
     return "El catálogo está vacío: agrega los celulares antes de leer cajas. Sin catálogo no hay modelo ni precio para calcular.";
