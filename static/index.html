@@ -138,6 +138,30 @@
   </form>
 </dialog>
 
+<!-- ============ CHATBOT DE CONSULTA DEL INVENTARIO (boton flotante) ============
+     Solo lee: POST /api/chat. Usa Gemini si el servidor tiene GOOGLE_API_KEY; si no, responde con reglas. -->
+<button id="chat-boton" class="chat-boton" type="button" aria-expanded="false" aria-controls="chat-ventana">Consultar inventario</button>
+<section id="chat-ventana" class="chat-ventana" aria-label="Chatbot de consulta del inventario" hidden>
+  <header class="chat-cab">
+    <div>
+      <strong>Asistente de inventario</strong>
+      <small id="chat-modo">Consulta stock y precios</small>
+    </div>
+    <button id="chat-cerrar" class="chat-cerrar" type="button" aria-label="Cerrar el chat">&times;</button>
+  </header>
+  <div id="chat-mensajes" class="chat-mensajes" role="log" aria-live="polite"></div>
+  <div id="chat-sugerencias" class="chat-sugerencias">
+    <button type="button" class="chat-sug">¿Cuántos iPhone 13 quedan?</button>
+    <button type="button" class="chat-sug">¿Cuánto cuesta el Redmi Note 13?</button>
+    <button type="button" class="chat-sug">¿Cuánto vale el inventario?</button>
+    <button type="button" class="chat-sug">¿Qué modelo tiene menos stock?</button>
+  </div>
+  <form id="chat-form" class="chat-form" autocomplete="off">
+    <input id="chat-input" type="text" maxlength="500" placeholder="Escribe tu pregunta…" aria-label="Tu pregunta">
+    <button id="chat-enviar" class="btn" type="submit">Enviar</button>
+  </form>
+</section>
+
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/static/js/app.js"></script>
 </body>

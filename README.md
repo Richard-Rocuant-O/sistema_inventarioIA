@@ -77,7 +77,7 @@ En el panel, **Contar por fotografía** → sube una foto o usa la foto de ejemp
 3. En el panel, sección **Leer cajas con OCR**: elige **una o varias imágenes** (una por caja) **o un PDF** (una caja por página), o usa **Tomar foto** en el celular → **Leer cajas** → aparece **una tarjeta por caja** con modelo, cantidad y el cálculo `cantidad × precio` → **Ingresar cajas al inventario**. El sistema detecta solo si cada archivo es imagen o PDF y nunca mezcla las cajas: cada una se calcula y se suma al stock por separado.
 4. El chatbot de tu amigo hace lo mismo con `POST /api/ocr` (ver `docs/API.md`).
 
-Para probar sin cámara: `python herramientas/probar_ocr.py` ensucia las cajas (giro, perspectiva, poca luz, ruido, JPG) y comprueba que se lean bien. Para regenerar las cajas: `python herramientas/generar_cajas.py`.
+Para probar sin cámara: `python herramientas/probar_ocr.py` ensucia las cajas (giro, perspectiva, poca luz, ruido, JPG) y comprueba que se lean bien. Para regenerar las cajas: `python herramientas/generar_cajas.py`. Para crear 5 cajas **extra** (los mismos modelos con otras cantidades: 10, 2, 8, 12 y 1 unidades) y un `cajas_de_prueba_extra.pdf`: `python herramientas/generar_cajas.py --extra` (no modifica las 3 cajas originales).
 
 Si una caja real no se lee: sácala de frente, con buena luz y sin reflejos, que la línea de cantidad se vea grande. Lo que no se pueda leer queda **por revisar** y no cambia el stock.
 
@@ -104,6 +104,7 @@ static/                     panel web (index.html, css, js), docs.html, imágene
 uploads/                    fotos subidas desde el panel
 docs/API.md                 documentación de la API
 ejemplo_chatbot_cliente.py  ejemplo de chatbot que consume la API
+chatbot.py                  chatbot de consulta del panel (Gemini, con respaldo por reglas)
 ocr.py                      lectura OCR de la caja (modelo + cantidad + calculo)
 cajas_de_prueba/            cajas ficticias para imprimir (PNG y PDF)
 herramientas/               generar_cajas.py y probar_ocr.py
@@ -114,6 +115,17 @@ Tablas de `inventario.db`: `celulares`, `movimientos` (historial de stock), `det
 
 La API no tiene autenticación: es para uso académico en una red local. Si se publica en internet habría que agregar login y HTTPS.
 
+
+## 7. Chatbot de consulta del inventario (botón flotante)
+
+En la esquina inferior derecha del panel hay un botón **Consultar inventario**. Abre un chat que responde preguntas como «¿cuántos iPhone 13 quedan?» o «¿cuánto vale el inventario?». Es de **solo lectura**: no cambia stock ni precios. Código en `chatbot.py` y endpoint `POST /api/chat` (ver `docs/API.md`).
+
+- **Con IA (Gemini, plan gratuito):** define tu clave de Google AI Studio como variable de entorno `GOOGLE_API_KEY` o en un archivo `.env` junto a `app.py`:
+  ```
+  GOOGLE_API_KEY=tu_clave
+  ```
+  El archivo `.env` está en `.gitignore`: **no lo subas a GitHub**. La clave solo la usa el servidor; nunca llega al navegador. El modelo por defecto es `gemini-3.1-flash-lite` (se cambia con la variable `GEMINI_MODEL`). El chat le entrega a Gemini el texto de `GET /api/contexto` y le pide responder solo con esos datos.
+- **Sin clave, o si Gemini falla** (sin internet, cuota gratuita agotada): responde en **modo básico** con reglas simples sobre precio, stock, total y listado de modelos, y avisa en el chat. La cabecera del chat muestra con qué modo está respondiendo.
 
 ## Si algo no funciona
 
