@@ -33,6 +33,7 @@ from flask import Flask, abort, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
+import chatbot
 import clasificador
 import db
 import ocr
@@ -155,7 +156,8 @@ def subidas(nombre):
 # ------------------------------------------------------------------ API: celulares
 @app.get("/api/health")
 def health():
-    return {"ok": True, "servicio": "inventario-celulares", "ocr": ocr.estado_ocr()}
+    return {"ok": True, "servicio": "inventario-celulares", "ocr": ocr.estado_ocr(),
+            "chat": chatbot.estado()}
 
 
 @app.get("/api/celulares")
@@ -271,11 +273,8 @@ def inventario():
         return jsonify(resumen_inventario(con))
 
 
-@app.get("/api/contexto")
-def contexto():
-    """Resumen en texto plano, pensado para pegarlo en el prompt de un chatbot."""
-    with db.conectar() as con:
-        inv = resumen_inventario(con)
+def armar_contexto(inv):
+    """Texto plano con todo el inventario (lo usan /api/contexto y el chatbot)."""
     def clp(n):
         return "$" + f"{n:,}".replace(",", ".")
 
@@ -290,7 +289,34 @@ def contexto():
     lineas.append(f"Total valorizado del inventario: {clp(inv['total_inventario'])}. "
                   f"Unidades totales: {inv['total_unidades']}. "
                   f"Equipos por revisar: {inv['por_revisar']}.")
-    return jsonify({"texto": "\n".join(lineas), "inventario": inv})
+    return "\n".join(lineas)
+
+
+@app.get("/api/contexto")
+def contexto():
+    """Resumen en texto plano, pensado para pegarlo en el prompt de un chatbot."""
+    with db.conectar() as con:
+        inv = resumen_inventario(con)
+    return jsonify({"texto": armar_contexto(inv), "inventario": inv})
+
+
+# ------------------------------------------------------------------ API: chatbot de consulta
+@app.post("/api/chat")
+def chat():
+    """Cuerpo: {"mensaje": "cuantos iPhone quedan?", "historial": [{"rol":"usuario"|"bot","texto":"..."}]}
+
+    Solo consulta (no modifica nada). Usa Gemini si hay GOOGLE_API_KEY; si no, responde con
+    reglas simples. Siempre lee el inventario actual, asi que refleja los ultimos cambios.
+    """
+    d = pedir_json()
+    mensaje = str(d.get("mensaje", "")).strip()
+    if not mensaje:
+        abort(400, "Escribe tu pregunta en el campo 'mensaje'.")
+    if len(mensaje) > 500:
+        abort(400, "La pregunta es demasiado larga (maximo 500 caracteres).")
+    with db.conectar() as con:
+        inv = resumen_inventario(con)
+    return jsonify(chatbot.responder(mensaje, d.get("historial"), armar_contexto(inv), inv))
 
 
 @app.get("/api/movimientos")

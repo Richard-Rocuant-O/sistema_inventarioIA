@@ -2,6 +2,10 @@
 venv/
 .venv/
 
+# Claves de API (por ejemplo GOOGLE_API_KEY para el chatbot): NUNCA subir a GitHub
+.env
+.env.*
+
 # Cache de Python
 __pycache__/
 *.py[cod]

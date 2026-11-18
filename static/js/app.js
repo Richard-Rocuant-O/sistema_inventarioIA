@@ -147,6 +147,19 @@ async function enviarCajas(archivos, aplicar = false) {
   return datos.lecturas;                              // lista de lecturas, una por caja
 }
 
+// Explica POR QUE una caja quedo "por revisar". El servidor ya enviaba el motivo,
+// pero la tarjeta solo mostraba "error" y el motivo se perdia.
+function mensajeCaja(d) {
+  if (d.aplicado) return "";
+  if (d.error) return d.error;
+  if (d.ya_ingresada) return "Esta misma caja ya se ingresó antes, por eso no se vuelve a sumar al stock.";
+  if (d.estado === "identificado") return "";
+  // sin celulares en el catalogo no hay con que comparar el texto de la caja ni precio para calcular
+  if (Array.isArray(d.ranking) && d.ranking.length === 0)
+    return "El catálogo está vacío: agrega los celulares antes de leer cajas. Sin catálogo no hay modelo ni precio para calcular.";
+  return d.motivo || "";
+}
+
 function tarjetaCaja(d) {
   const bien = d.estado === "identificado";
   const etiqueta = d.aplicado ? "Ingresada" : (d.ya_ingresada ? "Ya ingresada" : (bien ? "Leída correctamente" : "Por revisar"));
@@ -168,7 +181,7 @@ function tarjetaCaja(d) {
         el("span", { className: "chip", textContent: `Confianza ${Math.round((d.confianza || 0) * 100)} %` })),
       el("table", { className: "mini tabla-ocr" }, el("tbody", {}, ...filas.map(([k, v]) =>
         el("tr", {}, el("th", { textContent: k }), el("td", { textContent: v }))))),
-      d.error && !d.aplicado ? el("p", { className: "ayuda", textContent: d.error }) : "",
+      mensajeCaja(d) ? el("p", { className: "ayuda", textContent: mensajeCaja(d) }) : "",
       el("details", {}, el("summary", { textContent: "Texto leído por el OCR" }),
         el("pre", { className: "texto-ocr", textContent: d.texto_leido || "" }))));
 }
@@ -245,4 +258,70 @@ cargar().catch(e => toast("No se pudo cargar el inventario: " + e.message, true)
       a.hidden = false;
     }
   } catch (e) { /* si falla, el panel sigue funcionando */ }
+})();
+
+
+// ------------------------------------------------------------ chatbot de consulta (boton flotante)
+// Solo lee: manda la pregunta a POST /api/chat. El servidor usa Gemini si tiene
+// GOOGLE_API_KEY y, si no, responde con reglas simples. La clave nunca llega al navegador.
+// Los textos se ponen con textContent (nunca innerHTML) para que ninguna respuesta pueda inyectar HTML.
+(function chatbot() {
+  const boton = $("#chat-boton"), ventana = $("#chat-ventana"), lista = $("#chat-mensajes");
+  const form = $("#chat-form"), entrada = $("#chat-input"), enviar = $("#chat-enviar");
+  let historial = [];       // memoria de la conversacion: [{rol: "usuario"|"bot", texto}]
+  let ocupado = false;
+
+  function burbuja(clase, texto) {
+    const b = el("div", { className: "chat-msg " + clase, textContent: texto });
+    lista.append(b);
+    lista.scrollTop = lista.scrollHeight;
+    return b;
+  }
+
+  function abrir(mostrar) {
+    ventana.hidden = !mostrar;
+    boton.setAttribute("aria-expanded", String(mostrar));
+    boton.textContent = mostrar ? "Cerrar chat" : "Consultar inventario";
+    if (mostrar) {
+      if (!lista.children.length) burbuja("bot", "Hola, soy el asistente del inventario. Puedes preguntarme por el stock y el precio de cada modelo o por el total de la bodega.");
+      entrada.focus();
+    }
+  }
+
+  async function preguntar(texto) {
+    texto = texto.trim();
+    if (!texto || ocupado) return;
+    ocupado = true; enviar.disabled = true;
+    $("#chat-sugerencias").hidden = true;
+    burbuja("usuario", texto);
+    entrada.value = "";
+    const espera = burbuja("bot pensando", "Pensando…");
+    try {
+      const r = await api("/chat", jsonOpc("POST", { mensaje: texto, historial: historial.slice(-8) }));
+      espera.remove();
+      burbuja("bot", r.respuesta);
+      if (r.aviso) burbuja("aviso", r.aviso);
+      $("#chat-modo").textContent = r.modo === "gemini" ? "Respondiendo con IA (Gemini)" : "Modo básico (sin IA)";
+      historial.push({ rol: "usuario", texto }, { rol: "bot", texto: r.respuesta });
+    } catch (e) {
+      espera.remove();
+      burbuja("aviso", "No se pudo consultar: " + e.message);
+    } finally {
+      ocupado = false; enviar.disabled = false; entrada.focus();
+    }
+  }
+
+  boton.onclick = () => abrir(ventana.hidden);
+  $("#chat-cerrar").onclick = () => abrir(false);
+  form.addEventListener("submit", ev => { ev.preventDefault(); preguntar(entrada.value); });
+  $("#chat-sugerencias").addEventListener("click", ev => {
+    const b = ev.target.closest(".chat-sug");
+    if (b) preguntar(b.textContent);
+  });
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !ventana.hidden) abrir(false); });
+
+  // Muestra en la cabecera con que modo va a responder (IA o basico).
+  fetch(API + "/health").then(r => r.json()).then(h => {
+    if (h.chat) $("#chat-modo").textContent = h.chat.modo === "gemini" ? "Respondiendo con IA (Gemini)" : "Modo básico (sin clave de IA)";
+  }).catch(() => {});
 })();
