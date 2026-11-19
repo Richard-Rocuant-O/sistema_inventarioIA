@@ -8,6 +8,7 @@ Proyecto de **Aplicaciones de Inteligencia Artificial (TI2082)**. Cuenta celular
 | Servidor y API | Python + Flask | `app.py` |
 | Visión por computador | OpenCV + scikit-learn (HOG + color + SVM), YOLO opcional | `clasificador.py`, `entrenar_celulares.py` |
 | Lectura OCR de cajas | RapidOCR (pip) o Tesseract + OpenCV | `ocr.py`, `herramientas/` |
+| Ventas y predicción de stock (ML) | SQLite + NumPy + scikit-learn (`LinearRegression`) | `prediccion.py`, `static/js/prediccion.js` |
 | Panel web | HTML + CSS + JavaScript | `static/` |
 | Ejemplo de chatbot | Python (solo biblioteca estándar) | `ejemplo_chatbot_cliente.py` |
 
@@ -107,13 +108,14 @@ uploads/                    fotos subidas desde el panel
 docs/API.md                 documentación de la API
 ejemplo_chatbot_cliente.py  ejemplo de chatbot que consume la API
 chatbot.py                  chatbot de consulta del panel (Gemini, con respaldo por reglas)
+prediccion.py               ventas y predicción de quiebre de stock con regresión lineal (ML)
 ocr.py                      lectura OCR de la caja (modelo + cantidad + calculo)
 cajas_de_prueba/            cajas ficticias para imprimir (PNG y PDF)
 herramientas/               generar_cajas.py y probar_ocr.py
 docs/GUIA_CODIGO.md         guia para leer el codigo (paso a paso)
 ```
 
-Tablas de `inventario.db`: `celulares`, `movimientos` (historial de stock), `detecciones` (fotos analizadas), `lecturas_ocr` (cajas leídas) y `estado`. Para volver al estado inicial, cierra el servidor y borra `inventario.db`.
+Tablas de `inventario.db`: `celulares`, `movimientos` (historial de stock), `ventas` (historial diario por nombre de modelo), `detecciones` (fotos analizadas), `lecturas_ocr` (cajas leídas) y `estado`. Para volver al estado inicial, cierra el servidor y borra `inventario.db`.
 
 La API no tiene autenticación: es para uso académico en una red local. Si se publica en internet habría que agregar login y HTTPS.
 
@@ -127,7 +129,20 @@ En la esquina inferior derecha del panel hay un botón **Consultar inventario**.
   GOOGLE_API_KEY=tu_clave
   ```
   El archivo `.env` está en `.gitignore`: **no lo subas a GitHub**. La clave solo la usa el servidor; nunca llega al navegador. El modelo por defecto es `gemini-3.1-flash-lite` (se cambia con la variable `GEMINI_MODEL`). El chat le entrega a Gemini el texto de `GET /api/contexto` y le pide responder solo con esos datos.
-- **Sin clave, o si Gemini falla** (sin internet, cuota gratuita agotada): responde en **modo básico** con reglas simples sobre precio, stock, total y listado de modelos, y avisa en el chat. La cabecera del chat muestra con qué modo está respondiendo.
+- **Sin clave, o si Gemini falla** (sin internet, cuota gratuita agotada): responde en **modo básico** con reglas simples sobre precio, stock, total, listado de modelos y pronóstico de quiebre de stock (por ejemplo, «¿cuándo se acaba el iPhone 13?»), y avisa en el chat. La cabecera del chat muestra con qué modo está respondiendo.
+
+## 8. Ventas y predicción de quiebre de stock (ML)
+
+Debajo de **Catálogo y stock** el panel incluye la sección **Ventas y predicción de stock (ML)** (`prediccion.py` y `static/js/prediccion.js`):
+
+1. **Registrar ventas (`POST /api/ventas`):** elige modelo y cantidad entera positiva; descuenta el stock, registra un movimiento tipo `venta` y guarda la fila en la tabla `ventas` usando el **nombre** del modelo (para que el historial sobreviva si el celular se elimina). Devuelve `400` si la cantidad no es válida y `409` si supera el stock disponible.
+2. **Historial de transacciones (`GET /api/movimientos?limite=20`):** muestra las últimas 20 operaciones con etiquetas legibles (*Venta*, *Ingreso OCR*, *Alta*, *Baja*, etc.).
+3. **Predicción de quiebre de stock (`GET /api/prediccion`):** entrena una `LinearRegression` (scikit-learn) por modelo con variables de **tendencia (día)** + **día de la semana (one-hot)**:
+   - **Evaluación:** entrena sin los últimos 20 días y reporta el **MAE** del modelo frente a un promedio simple de los 14 días previos.
+   - **Pronóstico:** el modelo final usa todo el historial para proyectar 120 días (valores negativos = 0) y calcula venta diaria estimada, días y fecha hasta agotarse, punto de reorden (`venta diaria × 7 + 1,65 × σ × √7`), cantidad sugerida para cubrir 30 días y estado (`agotado`, `critico`, `reponer`, `ok`, `sin_datos`).
+   - **Chatbot:** el pronóstico se agrega automáticamente a `GET /api/contexto`, por lo que el chat responde preguntas como «¿cuándo se acaba el iPhone 13?».
+
+> **Supuesto del caso (ventas simuladas):** si la tabla `ventas` está vacía al iniciar, el sistema genera automáticamente **90 días de ventas simuladas** con semilla fija (patrón semanal + tendencia leve, distribución de Poisson), marcadas con `simulado = 1`. Las ventas registradas desde el panel o la API se guardan como datos reales (`simulado = 0`). La respuesta de `GET /api/prediccion` y el panel indican explícitamente cuando existen datos simulados.
 
 ## Si algo no funciona
 
