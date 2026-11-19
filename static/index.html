@@ -50,6 +50,70 @@
     <p id="vacio" class="vacio" hidden>No hay celulares que coincidan con la búsqueda.</p>
   </section>
 
+  <!-- ============ VENTAS Y PREDICCION DE STOCK (ML) ============ -->
+  <section class="panel" id="seccion-ventas-ml">
+    <div class="panel-cab">
+      <h2>Ventas y predicción de stock (ML)</h2>
+    </div>
+    <p class="ayuda">Registra una venta para descontar stock, consulta las últimas 20 operaciones del inventario y genera el pronóstico de quiebre de stock mediante regresión lineal (tendencia + día de la semana).</p>
+
+    <form id="form-venta" class="barra">
+      <select id="venta-modelo" aria-label="Modelo a vender" required>
+        <option value="">Cargando modelos…</option>
+      </select>
+      <input id="venta-cantidad" type="number" min="1" step="1" value="1" aria-label="Cantidad a vender" required>
+      <button id="btn-vender" class="btn" type="submit">Vender</button>
+      <span id="venta-estado" class="ayuda" role="status" aria-live="polite" style="margin:0"></span>
+    </form>
+
+    <div class="barra" style="margin-top:14px">
+      <button id="btn-prediccion" class="btn" type="button">Generar predicción de quiebre de stock (ML)</button>
+      <span id="pred-simulacion" class="chip aviso" hidden></span>
+    </div>
+
+    <div id="res-prediccion" hidden style="margin-top:10px">
+      <p id="pred-nota-mae" class="ayuda"></p>
+      <div class="tabla-wrap">
+        <table class="mini" id="tabla-prediccion">
+          <thead>
+            <tr>
+              <th>Modelo <small>(catálogo)</small></th>
+              <th class="num">Stock <small>(catálogo)</small></th>
+              <th class="num">Venta/día est. <small>(regresión lineal: ventas pasadas + tendencia + día de la semana)</small></th>
+              <th class="num">Se agota en <small>(cálculo: ventas pronosticadas acumuladas hasta igualar el stock)</small></th>
+              <th>Fecha est. <small>(cálculo: hoy + días hasta agotarse)</small></th>
+              <th class="num">Punto reorden <small>(cálculo: venta/día × 7 días de reposición + margen de seguridad)</small></th>
+              <th class="num">Sugerido (30 d) <small>(cálculo: ventas pronosticadas de 30 días − stock)</small></th>
+              <th>Estado <small>(regla: stock vs. punto de reorden; crítico si se agota en 7 días o menos)</small></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel-cab" style="margin-top:16px">
+      <h3>Historial de transacciones (últimas 20)</h3>
+      <button id="btn-refrescar-movs" class="btn btn-claro btn-mini" type="button">Actualizar historial</button>
+    </div>
+    <div class="tabla-wrap">
+      <table class="mini" id="tabla-movimientos">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Modelo</th>
+            <th class="num">Anterior</th>
+            <th class="num">Nuevo</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="movs-vacio" class="vacio" hidden>Todavía no hay transacciones registradas.</p>
+  </section>
+
   <!-- ============ LECTURA OCR DE CAJAS (imagenes y PDF) ============
        Cada imagen y cada pagina de PDF es UNA caja independiente.
        Flujo: elegir archivos -> "Leer cajas" (POST /api/ocr, vista previa)
@@ -140,5 +204,6 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/prediccion.js"></script>
 </body>
 </html>

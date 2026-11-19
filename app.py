@@ -37,6 +37,7 @@ import chatbot
 import clasificador
 import db
 import ocr
+import prediccion
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
@@ -292,6 +293,7 @@ def armar_contexto(inv):
     lineas.append(f"Total valorizado del inventario: {clp(inv['total_inventario'])}. "
                   f"Unidades totales: {inv['total_unidades']}. "
                   f"Equipos por revisar: {inv['por_revisar']}.")
+    lineas.extend(prediccion.lineas_contexto())
     return "\n".join(lineas)
 
 
@@ -541,6 +543,7 @@ def leer_caja_ocr():
 
 # Al importar el archivo se crea la base (y los 3 celulares de ejemplo si esta vacia).
 db.iniciar()
+prediccion.registrar(app)
 
 if __name__ == "__main__":
     puerto = int(os.environ.get("PUERTO", "5000"))

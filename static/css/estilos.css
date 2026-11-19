@@ -84,8 +84,11 @@ tfoot td { font-weight: 700; background: color-mix(in srgb, var(--borde) 60%, tr
 .chip { padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--borde) 55%, transparent); font-weight: 600; font-size: .9rem; }
 .chip.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 .chip.aviso { background: color-mix(in srgb, var(--aviso) 20%, transparent); color: var(--aviso); }
+.chip.mal { background: color-mix(in srgb, var(--rojo) 18%, transparent); color: var(--rojo); }
 .mini { margin-bottom: 10px; }
 .mini th { background: transparent; color: var(--texto); border-bottom: 2px solid var(--rojo); }
+.mini th small { display: block; font-weight: 400; color: var(--suave); font-size: .75rem; }
+#tabla-prediccion th small { color: var(--rojo); font-weight: 600; }
 
 .texto-ocr { white-space: pre-wrap; background: var(--fondo); border: 1px solid var(--borde); border-radius: 8px; padding: 8px 10px; font-size: .8rem; max-height: 200px; overflow: auto; }
 .cajas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 14px; margin-top: 12px; }

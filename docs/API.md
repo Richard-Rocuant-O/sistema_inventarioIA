@@ -34,10 +34,11 @@ Precios en pesos chilenos (enteros). `precio_x_cantidad` lo calcula la base de d
 |---|---|
 | `GET /api/health` | `{"ok": true}` si el servicio responde. |
 | `GET /api/inventario` | `{categoria, items[], total_inventario, total_unidades, modelos, por_revisar, ultima_actualizacion}`. Mismo formato que el JSON del informe. |
-| `GET /api/contexto` | `{texto, inventario}`. `texto` es un resumen en español listo para el prompt de un chatbot con IA. |
+| `GET /api/contexto` | `{texto, inventario}`. `texto` es un resumen en español listo para el prompt de un chatbot con IA (incluye el pronóstico de quiebre de stock). |
 | `GET /api/celulares` | Lista de celulares. Filtros: `q` (texto en modelo o marca, sin distinguir mayúsculas), `marca`, `con_stock=1`. |
 | `GET /api/celulares/{id}` | Un celular. |
 | `GET /api/movimientos?limite=50` | Historial de cambios de stock (más recientes primero). |
+| `GET /api/prediccion` | Pronóstico de quiebre de stock por modelo mediante regresión lineal (ML). |
 
 ## Escritura
 
@@ -48,6 +49,7 @@ Precios en pesos chilenos (enteros). `precio_x_cantidad` lo calcula la base de d
 | `PATCH /api/celulares/{id}/stock` | `{"cantidad": 10}` o `{"delta": -2}` | Fija o ajusta el stock. No permite quedar bajo 0. |
 | `DELETE /api/celulares/{id}` | – | Elimina el celular. |
 | `POST /api/celulares/{id}/imagen` | `multipart/form-data`, campo `imagen` (png, jpg, webp, máx. 10 MB) | Cambia la foto del producto. |
+| `POST /api/ventas` | `{"celular_id": 2, "cantidad": 1}` | Registra una venta (201), descuenta stock, crea movimiento `venta` y guarda fila en `ventas`. |
 
 Ejemplo (venta de una unidad):
 
@@ -156,7 +158,7 @@ La lectura toma unos segundos por caja (se ejecuta el OCR). Las cajas de prácti
 
 ### `POST /api/chat`
 
-Chatbot de **solo lectura** que responde preguntas sobre el inventario (stock, precios, totales). Es el mismo que usa el botón flotante del panel.
+Chatbot de **solo lectura** que responde preguntas sobre el inventario (stock, precios, totales y pronóstico de quiebre de stock, por ejemplo «¿cuándo se acaba el iPhone 13?»). Es el mismo que usa el botón flotante del panel.
 
 JSON de entrada:
 - `mensaje` (obligatorio, hasta 500 caracteres): la pregunta.
@@ -179,4 +181,90 @@ Ejemplo: `curl -X POST -H "Content-Type: application/json" -d '{"mensaje":"cuant
 - Con un modelo de lenguaje: llamar `GET /api/contexto` en cada conversación (o cada pocos minutos) y pegar `texto` en el mensaje de sistema, para que responda con el stock real.
 - Con reglas simples: buscar el modelo con `GET /api/celulares?q=<palabra>` y responder con `precio`, `cantidad`, `precio_x_cantidad`; mostrar la foto con `imagen_url`.
 - Para ingresar mercadería: enviar la foto de la caja a `POST /api/ocr` con `aplicar=1` (ver `ejemplo_chatbot_cliente.py`, función `leer_caja`).
-- Para registrar ventas: `PATCH /api/celulares/{id}/stock` con `{"delta": -1}`.
+- Para registrar ventas: `POST /api/ventas` con `{"celular_id": 2, "cantidad": 1}` (o `PATCH /api/celulares/{id}/stock` con `{"delta": -1}`).
+
+## Ventas y predicción de quiebre de stock (ML)
+
+> **Nota sobre datos simulados:** al crear la tabla `ventas`, si está vacía se siembran automáticamente **90 días de ventas simuladas** con semilla fija (`simulado = 1`, patrón semanal + tendencia leve, distribución de Poisson) como supuesto del caso. Las ventas registradas mediante `POST /api/ventas` se guardan como datos reales (`simulado = 0`) por **nombre** de modelo para que el historial sobreviva si el celular se elimina del catálogo.
+
+### `POST /api/ventas`
+
+Registra una venta real, descuenta el stock del celular, crea un movimiento `tipo: "venta"` en `/api/movimientos` e inserta el registro en `ventas`.
+
+Cuerpo JSON:
+```json
+{"celular_id": 2, "cantidad": 1}
+```
+
+Respuesta (`201 Created`):
+```json
+{
+  "id": 205,
+  "fecha": "2026-11-18",
+  "celular_id": 2,
+  "modelo": "iPhone 13",
+  "marca": "Apple",
+  "cantidad": 1,
+  "precio_unitario": 599990,
+  "total": 599990,
+  "stock_anterior": 3,
+  "stock_nuevo": 2,
+  "simulado": false
+}
+```
+
+Errores:
+- `400`: cuerpo inválido o `cantidad` no es un entero `> 0`.
+- `404`: no existe un celular con ese `celular_id`.
+- `409`: la cantidad supera el stock disponible.
+
+### `GET /api/prediccion`
+
+Entrena una `LinearRegression` (scikit-learn) por cada modelo del catálogo usando tendencia (índice de día) + día de la semana (codificación one-hot):
+- **Evaluación:** entrena sin los últimos 20 días y reporta el `mae_modelo` comparado contra `mae_promedio` (promedio simple de los 14 días previos).
+- **Pronóstico:** entrena el modelo final con todo el historial y proyecta 120 días (valores negativos = 0).
+- **Indicadores:** `venta_diaria`, `dias_hasta_agotarse`, `fecha_agotamiento`, `punto_reorden` (`venta_diaria × 7 + 1,65 × σ_residuos × √7`), `cantidad_sugerida` (para cubrir 30 días) y `estado`:
+  - `agotado`: stock en 0.
+  - `critico`: se agota en ≤ 7 días.
+  - `reponer`: stock ≤ punto de reorden.
+  - `ok`: stock suficiente.
+  - `sin_datos`: historial insuficiente para entrenar.
+
+Ejemplo de respuesta (`200 OK`):
+```json
+{
+  "fecha_calculo": "2026-11-18",
+  "modelo_ml": "LinearRegression (tendencia + dia de la semana one-hot)",
+  "horizonte_dias": 120,
+  "dias_reposicion": 7,
+  "dias_cobertura": 30,
+  "dias_evaluacion": 20,
+  "dias_baseline": 14,
+  "datos_simulados": true,
+  "nota_simulacion": "El historial base de 90 dias corresponde a ventas simuladas (supuesto del caso, semilla fija). Las ventas registradas desde el panel o POST /api/ventas se guardan como datos reales (simulado=0).",
+  "evaluacion": {
+    "mae_modelo": 0.65,
+    "mae_promedio": 0.72,
+    "modelos_evaluados": 3
+  },
+  "items": [
+    {
+      "celular_id": 1,
+      "modelo": "Galaxy A15",
+      "marca": "Samsung",
+      "stock_actual": 6,
+      "venta_diaria": 1.15,
+      "dias_hasta_agotarse": 5,
+      "fecha_agotamiento": "2026-11-23",
+      "punto_reorden": 13,
+      "cantidad_sugerida": 29,
+      "estado": "critico",
+      "sigma_residuos": 1.05,
+      "mae_modelo": 0.82,
+      "mae_promedio": 0.91,
+      "dias_historial": 90,
+      "datos_simulados": true
+    }
+  ]
+}
+```

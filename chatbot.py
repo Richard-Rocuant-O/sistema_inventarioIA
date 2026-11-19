@@ -44,6 +44,9 @@ Reglas:
 - Escribe los precios en pesos chilenos con punto de miles, por ejemplo $129.990.
 - Solo respondes consultas. No puedes cambiar stock, precios ni el catalogo: si te lo piden, \
 explica que eso se hace desde el panel.
+- Si preguntan cuando se acaba o agota un modelo, que modelos hay que reponer o por la \
+prediccion de stock, usa los datos de pronostico de quiebre de stock de abajo y aclara \
+brevemente si se basa en historial de ventas simulado.
 - Si preguntan algo que no tiene relacion con el inventario, di amablemente que solo puedes \
 responder sobre el inventario.
 
@@ -108,6 +111,28 @@ def _clp(n):
     return "$" + f"{n:,}".replace(",", ".")
 
 
+def _resumen_pred_item(p, nombre, incluir_nota=True):
+    """Formatea en texto plano la prediccion de quiebre de stock de un modelo."""
+    nota = " (pronostico ML con historial base simulado)" if (incluir_nota and p.get("datos_simulados")) else ""
+    est = p.get("estado")
+    if est == "sin_datos":
+        return (f"Todavia no hay suficientes datos de ventas para predecir cuando se acaba el {nombre} "
+                f"(stock actual: {p['stock_actual']} unidades).")
+    if est == "agotado":
+        sug = p.get("cantidad_sugerida") or 0
+        extra = f" Se sugiere reponer {sug} unidades para cubrir 30 dias." if sug else ""
+        return (f"El {nombre} esta agotado (0 unidades; venta estimada {p['venta_diaria']} u/dia)."
+                f"{extra}{nota}")
+    if p.get("dias_hasta_agotarse") is None:
+        return (f"El {nombre} (stock: {p['stock_actual']} unidades, venta estimada {p['venta_diaria']} u/dia) "
+                f"no se agotaria en los proximos 120 dias (estado: {est}).{nota}")
+    sug = p.get("cantidad_sugerida") or 0
+    extra = f", sugerido reponer {sug} unidades (30 dias)" if sug else ""
+    return (f"El {nombre} (stock: {p['stock_actual']} unidades) se agotaria en {p['dias_hasta_agotarse']} "
+            f"dias (aprox. {p['fecha_agotamiento']}), con una venta estimada de {p['venta_diaria']} u/dia. "
+            f"Estado: {est}, punto de reorden: {p['punto_reorden']} unidades{extra}.{nota}")
+
+
 def _reglas(pregunta, inv):
     """Respuestas simples por palabras clave. Se usa cuando Gemini no esta disponible."""
     t = _norm(pregunta)
@@ -118,10 +143,25 @@ def _reglas(pregunta, inv):
     def alguna(*palabras):
         return any(p in t for p in palabras)
 
+    quiere_pred = alguna(
+        "acaba", "acabe", "agota", "agote", "agotar", "quiebre",
+        "prediccion", "pronostico", "reponer", "reposicion", "reorden",
+        "cuando", "durar", "dura", "dias", "alcanza",
+    )
+
+    def _pred_por_modelo():
+        try:
+            import prediccion
+            pred = prediccion.calcular_prediccion()
+            return pred, {it["modelo"]: it for it in pred["items"]}
+        except Exception:
+            return None, {}
+
     # 1) Preguntas sobre un modelo o marca concreta
     mencionados = [i for i in items
                    if any(len(p) >= 3 and p in t for p in _norm(f"{i['nombre']} {i['marca']}").split())]
     if mencionados:
+        _, mapa_pred = _pred_por_modelo() if quiere_pred else (None, {})
         lineas = []
         for i in mencionados:
             nombre = f"{i['marca']} {i['nombre']}"
@@ -132,13 +172,27 @@ def _reglas(pregunta, inv):
             if quiere_stock:
                 lineas.append(f"Del {nombre} quedan {i['cantidad']} unidades "
                               f"({_clp(i['precio_x_cantidad'])} en bodega).")
-            if not (quiere_precio or quiere_stock):
+            if quiere_pred and i["nombre"] in mapa_pred:
+                lineas.append(_resumen_pred_item(mapa_pred[i["nombre"]], nombre))
+            if not (quiere_precio or quiere_stock or (quiere_pred and i["nombre"] in mapa_pred)):
                 lineas.append(f"{nombre}: {_clp(i['precio'])}, {i['cantidad']} unidades en stock. "
                               f"Pantalla {i['pantalla']}, RAM {i['ram']}, almacenamiento "
                               f"{i['almacenamiento']}, bateria {i['bateria']}, camara {i['camara']}.")
         return "\n".join(lineas)
 
     # 2) Preguntas generales
+    if quiere_pred:
+        pred, _ = _pred_por_modelo()
+        if pred and pred["items"]:
+            encabezado = (
+                "Pronostico de quiebre de stock (historial base de 90 dias simulado):"
+                if pred.get("datos_simulados")
+                else "Pronostico de quiebre de stock:"
+            )
+            lineas = [encabezado]
+            for p in pred["items"]:
+                lineas.append("- " + _resumen_pred_item(p, f"{p['marca']} {p['modelo']}", incluir_nota=False))
+            return "\n".join(lineas)
     if alguna("revisar"):
         return f"Hay {inv['por_revisar']} equipos por revisar."
     if alguna("mas stock", "mayor stock"):
